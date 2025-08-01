@@ -38,7 +38,7 @@ def set_paragraph_background(paragraph, color):
     pPr.append(shd)
 
 # Carregar o arquivo Excel
-df = pd.read_excel('Iniciativas - RGS 2025.1 - Extração Painel de Controle.xlsx', skiprows=1)
+df = pd.read_excel('Iniciativas - RGS 2025.1 - Extração Painel de Controle.xlsx')
 
 # Selecionar e renomear as colunas
 colunas = ['Órgão', 'Iniciativa', 'Status Informado', 'Ação', 'Programa',
@@ -69,77 +69,102 @@ doc = Document()
 
 for idx, row in enumerate(df2.itertuples()):
     if idx > 0:
-        doc.add_paragraph('\n')  # Adiciona espaçamento entre os órgãos
+        doc.add_paragraph('\n')  # Espaço entre blocos
 
     cor = cores_por_tema[row.Objetivo_Estrategico]
-    # Adicionar título com fundo
-    title = doc.add_heading(f'{row.Orgao}', level=1)
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_paragraph_background(title, cor)  # Fundo cinza
-    style = doc.styles['Heading 1']  # Aqui, passe o nome do estilo como string
-    font = style.font
-    font.name = 'Gilroy Extrabold'  # Não é chamada, é uma atribuição
-    font.size = Pt(12)
-    font.color.rgb = RGBColor(255, 255, 255)
+
+    # --- ORGAO ---
+    p_orgao = doc.add_paragraph()
+    p_orgao.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_orgao.paragraph_format.space_before = Pt(0)
+    p_orgao.paragraph_format.space_after = Pt(0)
+    run = p_orgao.add_run(f'{row.Orgao}')
+    run.font.name = 'Gilroy ExtraBold'
+    run.font.size = Pt(12)
+    run.font.color.rgb = RGBColor(0, 32, 96)
+    set_paragraph_background(p_orgao, 'D3D3D3')
+
+    # --- PROGRAMA ---
+    p_programa = doc.add_paragraph()
+    p_programa.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_programa.paragraph_format.space_before = Pt(0)
+    p_programa.paragraph_format.space_after = Pt(0)
+    run = p_programa.add_run(f'{row.Programa}')
+    run.font.name = 'Gilroy Light'
+    run.font.size = Pt(12)
+    run.font.color.rgb = RGBColor(255, 255, 255)
+    set_paragraph_background(p_programa, cor)
+
+    # --- ACAO ---
+    p_acao = doc.add_paragraph()
+    p_acao.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_acao.paragraph_format.space_before = Pt(0)
+    p_acao.paragraph_format.space_after = Pt(0)
+    run = p_acao.add_run(f'{row.Acao}')
+    run.font.name = 'Gilroy Light'
+    run.font.size = Pt(12)
+    run.font.color.rgb = RGBColor(255, 255, 255)
+    set_paragraph_background(p_acao, cor)
 
 
-    # Adicionar um parágrafo para Programa e Ação juntos
-    p = doc.add_paragraph()
-    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Alinhamento centralizado
-    run = p.add_run(f'{row.Programa}\n{row.Acao}')  # Ambos os textos no mesmo parágrafo
-    font = run.font
-    font.name = 'Gilroy Light'
-    font.size = Pt(12)
-    set_paragraph_background(p, cor)  # Fundo vermelho para o parágrafo inteiro
-    
-    # Evita fundo em linhas extras
-    doc.add_paragraph()  # Adiciona linha em branco sem fundo
+    # Espaço menor que uma linha entre Acao e Iniciativa
+    doc.add_paragraph()
 
-    p3 = doc.add_paragraph()
-    p3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p3.add_run(f'{row.Iniciativa}')
-    font = run.font
-    font.name = 'Gilroy-ExtraBold'
-    font.size = Pt(10)
-    font.color.rgb = RGBColor(0, 0, 0)  # Cor preta
+    # --- INICIATIVA ---
+    p_iniciativa = doc.add_paragraph()
+    p_iniciativa.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = p_iniciativa.add_run(f'{row.Iniciativa}')
+    run.font.name = 'Gilroy ExtraBold'
+    run.font.size = Pt(10)
+    run.bold = True
+    run.font.color.rgb = RGBColor(0, 0, 0)
+    set_paragraph_background(p_iniciativa, 'D3D3D3')
 
-    set_paragraph_background(p3, 'D3D3D3')
+    # --- STATUS E DATAS ---
+    p_status = doc.add_paragraph()
+    p_status.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-    # Parágrafo onde "Status" e "Data de Início/Término" aparecem
-    p4 = doc.add_paragraph()
-
-    # Configurar tabulação
+    # Tabulação
     tab_stop = OxmlElement('w:tabs')
     tab = OxmlElement('w:tab')
-    tab.set(qn('w:val'), 'right')  # Define como alinhamento à direita
-    tab.set(qn('w:pos'), '8000')  # Define a posição da tabulação (8000 twips)
+    tab.set(qn('w:val'), 'right')
+    tab.set(qn('w:pos'), '8000')
     tab_stop.append(tab)
-    p4._p.get_or_add_pPr().append(tab_stop)
+    p_status._p.get_or_add_pPr().append(tab_stop)
 
-    # Adicionar datas com o formato dd/mm/aaaa
+    font_name_status = 'Neutro Thin'
+
     if row.Status_Informado == 'CONCLUÍDO':
-        # Adicionar "Status:"
-        run_status = p4.add_run(f"✅Status: {row.Status_Informado}")
+        run_status = p_status.add_run(f"✅Status: {row.Status_Informado}")
+        run_status.font.name = font_name_status
         run_status.font.size = Pt(9)
-        p4.add_run("\t")
-
+        p_status.add_run("\t")
         termino_formatado = row.Termino_Realizado.strftime('%d/%m/%Y') if pd.notna(row.Termino_Realizado) else ''
-        run_date = p4.add_run(f" 📅 Data de Término: {termino_formatado}")
+        run_date = p_status.add_run(f"📅 Data de Término: {termino_formatado}")
+        run_date.font.name = font_name_status
         run_date.font.size = Pt(9)
     else:
-        # Adicionar "Status:"
-        run_status = p4.add_run(f"🔄 Status: {row.Status_Informado}")
+        run_status = p_status.add_run(f"🔄 Status: {row.Status_Informado}")
+        run_status.font.name = font_name_status
         run_status.font.size = Pt(9)
-        p4.add_run("\t")
+        p_status.add_run("\t")
         inicio_formatado = row.Inicio_Realizado.strftime('%d/%m/%Y') if pd.notna(row.Inicio_Realizado) else ''
-        run_date = p4.add_run(f" 📅 Data de Início: {inicio_formatado}")
+        run_date = p_status.add_run(f"📅 Data de Início: {inicio_formatado}")
+        run_date.font.name = font_name_status
         run_date.font.size = Pt(9)
 
-    # Adicionar outros textos
-    p5 = doc.add_paragraph(f'📍 Municípios Atendidos:\t \t{row.Localizacao_Geografica}')
-    p6 = doc.add_paragraph()
-    run = p6.add_run(f'{row.RGS_2025_GGGE}')
+    # --- MUNICÍPIOS ATENDIDOS ---
+    p_municipios = doc.add_paragraph(f'📍 Municípios Atendidos:\t \t{row.Localizacao_Geografica}')
+    run = p_municipios.runs[0]
+    run.font.name = 'Neutro'
+    run.font.size = Pt(10)
+
+    # --- RGS 2025 GGGE ---
+    p_rgs = doc.add_paragraph()
+    run = p_rgs.add_run(f'{row.RGS_2025_GGGE}')
+    run.font.name = 'Neutro'
     run.font.size = Pt(9)
+
 
 # Salvar o documento
 doc.save("teste.docx")  
