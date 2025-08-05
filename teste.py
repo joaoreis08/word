@@ -3,11 +3,12 @@ from docx.shared import Pt
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml.ns import qn  
 import pandas as pd
 from docx.shared import Pt, Inches
 from docx.shared import RGBColor
+from datetime import datetime
 
 
 cores_por_tema = {
@@ -108,70 +109,69 @@ for idx, row in enumerate(df2.itertuples()):
     run.font.color.rgb = RGBColor(255, 255, 255)
     set_paragraph_background(p_acao, cor)
 
-
     # Espaço menor que uma linha entre Acao e Iniciativa
     doc.add_paragraph()
 
+    #Criando tabela
+    table = doc.add_table(rows=4, cols=5)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = True
 
-
-    # --- INICIATIVA ---
-    p_iniciativa = doc.add_paragraph()
-    p_iniciativa.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p_iniciativa.add_run(f'{row.Iniciativa}')
+    # 1 linha
+    cell = table.cell(0, 0)
+    cell_merge = cell.merge(table.cell(0, 4))
+    paragraph = cell_merge.paragraphs[0]
+    paragraph.alignment = 1  # Center
+    run = paragraph.add_run(str(row.Iniciativa))
     run.font.name = 'Gilroy ExtraBold'
     run.font.size = Pt(10)
     run.bold = True
-    run.font.color.rgb = RGBColor(0, 0, 0)
-    set_paragraph_background(p_iniciativa, 'D3D3D3')
+    cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
-    # --- STATUS E DATAS ---
-    p_status = doc.add_paragraph()
-    p_status.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
-    # Tabulação
-    tab_stop = OxmlElement('w:tabs')
-    tab = OxmlElement('w:tab')
-    tab.set(qn('w:val'), 'right')
-    tab.set(qn('w:pos'), '8000')
-    tab_stop.append(tab)
-    p_status._p.get_or_add_pPr().append(tab_stop)
-
-    font_name_status = 'Neutro Thin'
-
-    if row.Status_Informado == 'CONCLUÍDO':
-        run_status = p_status.add_run(f"Status: {row.Status_Informado}")
-        run_status.font.name = font_name_status
-        run_status.font.size = Pt(9)
-        p_status.add_run("\t")
-        termino_formatado = row.Termino_Realizado.strftime('%d/%m/%Y') if pd.notna(row.Termino_Realizado) else ''
-        run_date = p_status.add_run(f"Data de Término: {termino_formatado}")
-        run_date.font.name = font_name_status
-        run_date.font.size = Pt(9)
+    # 2 linha
+    imagem = 'imagens\concluído.png' if row.Status_Informado == 'CONCLUÍDO' else 'imagens\em_excecucao.png'
+    data = 'Data de Entrega' if  row.Status_Informado == 'CONCLUÍDO' else 'Data de Início'
+    valor_da_data = row.Termino_Realizado if  row.Status_Informado == 'CONCLUÍDO' else row.Inicio_Realizado
+    if pd.notnull(valor_da_data):
+        valor_da_data_str = valor_da_data.strftime('%d/%m/%Y')
     else:
-        run_status = p_status.add_run(f"Status: {row.Status_Informado}")
-        run_status.font.name = font_name_status
-        run_status.font.size = Pt(9)
-        p_status.add_run("\t")
-        inicio_formatado = row.Inicio_Realizado.strftime('%d/%m/%Y') if pd.notna(row.Inicio_Realizado) else ''
-        run_date = p_status.add_run(f"Data de Início: {inicio_formatado}")
-        run_date.font.name = font_name_status
-        run_date.font.size = Pt(9)
+        valor_da_data_str = ""
+    p_img = table.cell(1, 0).paragraphs[0]
+    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_img = p_img.add_run()
+    run_img.add_picture(imagem, width=Inches(0.2))
+    table.cell(1, 0).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    # (Coluna 2) Texto do status
+    p_status = table.cell(1, 1).paragraphs[0]
+    p_status.add_run(f"Status: {row.Status_Informado}").font.size = Pt(9)
+    table.cell(1, 1).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    # (Coluna 3) Ícone data
+    p_date_icon = table.cell(1, 2).paragraphs[0]
+    p_date_icon.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_date_icon = p_date_icon.add_run()
+    run_date_icon.add_picture('imagens\calendário.png', width=Inches(0.2))
+    table.cell(1, 2).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    # (Coluna 4) Texto "Data da Entrega:"
+    p_data_label = table.cell(1, 3).paragraphs[0]
+    p_data_label.add_run(f"{data}:").font.size = Pt(9)
+    table.cell(1, 3).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
+    # (Coluna 5) Valor da data
+    p_data_value = table.cell(1, 4).paragraphs[0]
+    p_data_value.add_run(f'{valor_da_data}').font.size = Pt(9)
+    table.cell(1, 4).vertical_alignment = WD_ALIGN_VERTICAL.CENTER
 
-
-    # --- MUNICÍPIOS ATENDIDOS ---
-    p_municipios = doc.add_paragraph(f'📍 Municípios Atendidos:\t \t{row.Localizacao_Geografica}')
-    run = p_municipios.runs[0]
-    run.font.name = 'Neutro'
-    run.font.size = Pt(10)
-
-    # --- RGS 2025 GGGE ---
-    p_rgs = doc.add_paragraph()
-    run = p_rgs.add_run(f'{row.RGS_2025_GGGE}')
-    run.font.name = 'Neutro'
-    run.font.size = Pt(9)
     
+
+    # 4ª linha: Descrição (merge)
+    cell_desc = table.cell(3, 0)
+    cell_desc.merge(table.cell(3, 4))
+    p_desc = cell_desc.paragraphs[0]
+    p_desc.add_run(f'{row.RGS_2025_GGGE}').font.size = Pt(9)
+    cell_desc.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+
+
 
 
 # Salvar o documento
-doc.save("teste.docx")  
+doc.save("teste2.docx")  
