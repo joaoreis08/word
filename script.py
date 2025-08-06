@@ -3,11 +3,12 @@ from docx.shared import Pt
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
 from docx.oxml.ns import qn  
 import pandas as pd
 from docx.shared import Pt, Inches
 from docx.shared import RGBColor
+from datetime import datetime
 
 
 cores_por_tema = {
@@ -17,6 +18,14 @@ cores_por_tema = {
     "DESENVOLVIMENTO SUSTENTÁVEL": "#87D200",  # Verde
     "Gestão, Transparência e Participação": "#002060"  # Azul escuro
 }
+
+def set_cell_background(cell, hex_color):
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = OxmlElement('w:shd')
+    shd.set(qn('w:val'), 'clear')
+    shd.set(qn('w:color'), 'auto')
+    shd.set(qn('w:fill'), hex_color)
+    tcPr.append(shd)
 
 
 
@@ -40,7 +49,7 @@ def set_paragraph_background(paragraph, color):
     pPr.append(shd)
 
 # Carregar o arquivo Excel
-df = pd.read_excel('Iniciativas - RGS 2025.1 - Extração Painel de Controle.xlsx')
+df = pd.read_excel('Iniciativas - RGS 2025.1 - Extração Painel de Controle copy.xlsx',skiprows=1)
 
 # Selecionar e renomear as colunas
 colunas = ['Órgão', 'Iniciativa', 'Status Informado', 'Ação', 'Programa',
@@ -61,7 +70,7 @@ df2.rename(columns={
 }, inplace=True)
 
 # Converter as colunas de datas
-df2.loc[:, ['Inicio_Realizado', 'Termino_Realizado']] = df2[['Inicio_Realizado', 'Termino_Realizado']].apply(
+df2[['Inicio_Realizado', 'Termino_Realizado']] = df2[['Inicio_Realizado', 'Termino_Realizado']].apply(
     lambda x: pd.to_datetime(x, errors='coerce', dayfirst=True)
 )
 
@@ -108,70 +117,86 @@ for idx, row in enumerate(df2.itertuples()):
     run.font.color.rgb = RGBColor(255, 255, 255)
     set_paragraph_background(p_acao, cor)
 
-
     # Espaço menor que uma linha entre Acao e Iniciativa
     doc.add_paragraph()
 
+    status = 'imagens\concluído.png' if row.Status_Informado == 'CONCLUÍDO' else 'imagens\em_excecucao.png'
+    status_texto = 'Data de Entrega:' if row.Status_Informado == 'CONCLUÍDO' else 'Data de Início:'
+    prazo = row.Termino_Realizado if row.Status_Informado == 'CONCLUÍDO' else row.Inicio_Realizado
+    localizacao = 'imagens\localização.png'
+    calendario = 'imagens\calendário.png'
+    
+    #criar tabela
+    table = doc.add_table(rows=4, cols=5)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.autofit = False
 
-
-    # --- INICIATIVA ---
-    p_iniciativa = doc.add_paragraph()
-    p_iniciativa.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p_iniciativa.add_run(f'{row.Iniciativa}')
+    #1 linha
+    cell = table.cell(0, 0)
+    cell_merge = cell.merge(table.cell(0, 4))
+    paragraph = cell_merge.paragraphs[0]
+    paragraph.alignment = 1  # Center
+    run = paragraph.add_run(str(row.Iniciativa))
     run.font.name = 'Gilroy ExtraBold'
     run.font.size = Pt(10)
     run.bold = True
-    run.font.color.rgb = RGBColor(0, 0, 0)
-    set_paragraph_background(p_iniciativa, 'D3D3D3')
+    cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+    set_cell_background(cell, 'D3D3D3')
 
-    # --- STATUS E DATAS ---
-    p_status = doc.add_paragraph()
-    p_status.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
-    # Tabulação
-    tab_stop = OxmlElement('w:tabs')
-    tab = OxmlElement('w:tab')
-    tab.set(qn('w:val'), 'right')
-    tab.set(qn('w:pos'), '8000')
-    tab_stop.append(tab)
-    p_status._p.get_or_add_pPr().append(tab_stop)
+    #2 linha
+    #linha 2, coluna 1
+    cell_status = table.cell(1, 0)
+    cell_status_merge = cell_status.merge(table.cell(1, 1))
+    par_status = cell_status_merge.paragraphs[0]
+    run_status = par_status.add_run()
+    run_status.add_picture(status, width=Inches(0.17))
+    run_status.add_text(f'  Status:  {row.Status_Informado}')
+    run_status.font.name = 'Gilroy Light'
+    run_status.font.size = Pt(9)
+    run_status.font.color.rgb = RGBColor(0, 0, 0)
 
-    font_name_status = 'Neutro Thin'
+    #linha 2,coluna 3
 
-    if row.Status_Informado == 'CONCLUÍDO':
-        run_status = p_status.add_run(f"Status: {row.Status_Informado}")
-        run_status.font.name = font_name_status
-        run_status.font.size = Pt(9)
-        p_status.add_run("\t")
-        termino_formatado = row.Termino_Realizado.strftime('%d/%m/%Y') if pd.notna(row.Termino_Realizado) else ''
-        run_date = p_status.add_run(f"Data de Término: {termino_formatado}")
-        run_date.font.name = font_name_status
-        run_date.font.size = Pt(9)
+    if pd.notnull(prazo):
+        data_texto = prazo.strftime('%d/%m/%Y')
     else:
-        run_status = p_status.add_run(f"Status: {row.Status_Informado}")
-        run_status.font.name = font_name_status
-        run_status.font.size = Pt(9)
-        p_status.add_run("\t")
-        inicio_formatado = row.Inicio_Realizado.strftime('%d/%m/%Y') if pd.notna(row.Inicio_Realizado) else ''
-        run_date = p_status.add_run(f"Data de Início: {inicio_formatado}")
-        run_date.font.name = font_name_status
-        run_date.font.size = Pt(9)
+        data_texto = ''
 
+    cell_status2 = table.cell(1,2)
+    cell_status_merge2 = cell_status2.merge(table.cell(1, 3))
+    par_status2 = cell_status_merge2.paragraphs[0]
+    run_status2 = par_status2.add_run()
+    run_status2.add_picture(calendario, width=Inches(0.17))
+    run_status2.add_text(f'  {status_texto}')
 
-
-    # --- MUNICÍPIOS ATENDIDOS ---
-    p_municipios = doc.add_paragraph(f'📍 Municípios Atendidos:\t \t{row.Localizacao_Geografica}')
-    run = p_municipios.runs[0]
-    run.font.name = 'Neutro'
-    run.font.size = Pt(10)
-
-    # --- RGS 2025 GGGE ---
-    p_rgs = doc.add_paragraph()
-    run = p_rgs.add_run(f'{row.RGS_2025_GGGE}')
-    run.font.name = 'Neutro'
-    run.font.size = Pt(9)
+    cell_status3 = table.cell(1,4)
+    par_status3 = cell_status3.paragraphs[0]
+    run_status3 = par_status3.add_run()
+    run_status3.add_text(data_texto)
     
 
 
-# Salvar o documento
-doc.save("teste.docx")  
+
+
+    #linha 3,coluna 1
+    icone_localizacao = table.cell(2,0).paragraphs[0]
+    icone_localizacao = icone_localizacao.add_run()
+    icone_localizacao.add_picture(localizacao,width=Inches(0.17))
+    #linha3, coluna2
+    table.cell(2,1).text = 'Municípios Atendidos: '
+
+    #linha3, coluna 3
+    cell_loc = table.cell(2,2)
+    cell_loc_merged = cell_loc.merge(table.cell(2,4))
+    par_loc = cell_loc_merged.paragraphs[0]
+    par_loc.add_run("" if pd.isnull(row.Localizacao_Geografica) else str(row.Localizacao_Geografica))
+
+    #linha 4, coluna 1
+    cell2 = table.cell(3, 0)
+    cell_merge2 = cell2.merge(table.cell(3, 4))
+    paragraph2 = cell_merge2.paragraphs[0]
+    run2 = paragraph2.add_run(str(row.RGS_2025_GGGE)) 
+
+
+doc.save('teste.docx')
