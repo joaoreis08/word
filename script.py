@@ -37,15 +37,11 @@ def set_paragraph_background(paragraph, color):
     pPr.append(shd)
 
 # --- Leitura e Preparação dos Dados ---
-# Carregar o arquivo Excel (certifique-se de que o caminho está correto)
+# Carregar o arquivo Excel
 df = pd.read_excel('Iniciativas - RGS 2025.1 - Extração Painel de Controle copy.xlsx', skiprows=1)
 
-# Selecionar e renomear as colunas
-colunas = ['Órgão', 'Iniciativa', 'Status Informado', 'Ação', 'Programa',
-           'Início Realizado', 'Término Realizado', 'RGS 2025.1 - GGGE', 'Localização Geográfica', 'Objetivo Estratégico']
-df2 = df[colunas]
-
-df2.rename(columns={
+# Renomear colunas
+df.rename(columns={
     'Órgão': 'Orgao',
     'Iniciativa': 'Iniciativa',
     'Status Informado': 'Status_Informado',
@@ -58,30 +54,61 @@ df2.rename(columns={
     'Objetivo Estratégico': 'Objetivo_Estrategico'
 }, inplace=True)
 
+# Selecionar as colunas necessárias
+colunas = ['Orgao', 'Iniciativa', 'Status_Informado', 'Acao', 'Programa',
+           'Inicio_Realizado', 'Termino_Realizado', 'RGS_2025_GGGE', 'Localizacao_Geografica', 'Objetivo_Estrategico']
+df2 = df[colunas]
+
 # Converter as colunas de datas
 df2[['Inicio_Realizado', 'Termino_Realizado']] = df2[['Inicio_Realizado', 'Termino_Realizado']].apply(
     lambda x: pd.to_datetime(x, errors='coerce', dayfirst=True)
 )
 
+# <<< NOVA LÓGICA DE ORDENAÇÃO POR COR >>>
+# 1. Definir a ordem manual dos temas (e suas cores)
+ordem_temas = {
+    "CONHECIMENTO E INOVAÇÃO": 1,                # Azul
+    "SAÚDE E QUALIDADE DE VIDA": 2,              # Vermelho
+    "DESENVOLVIMENTO SUSTENTÁVEL": 3,            # Verde
+    "SEGURANÇA E CIDADANIA": 4,                  # Amarelo
+    "Gestão, Transparência e Participação": 5    # Azul escuro
+}
+
+# 2. Criar uma coluna de ordenação no DataFrame usando o dicionário acima
+# O .map() aplica a ordem. O .fillna(99) garante que temas não listados fiquem por último.
+df2['Ordem_Tema'] = df2['Objetivo_Estrategico'].map(ordem_temas).fillna(99)
+
+# 3. Ordenar o DataFrame: primeiro pela ordem do tema, depois pelo nome do órgão
+df2 = df2.sort_values(by=['Ordem_Tema', 'Orgao'])
+
 # --- Criação do Documento Word ---
 doc = Document()
 
-for idx, row in enumerate(df2.itertuples()):
-    if idx > 0:
-        doc.add_paragraph('\n')
+# Variável para rastrear o último órgão impresso.
+orgao_anterior = None
 
+for idx, row in enumerate(df2.itertuples()):
     cor = cores_por_tema.get(row.Objetivo_Estrategico, "D3D3D3")
 
-    p_orgao = doc.add_paragraph()
-    p_orgao.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    p_orgao.paragraph_format.space_before = Pt(0)
-    p_orgao.paragraph_format.space_after = Pt(0)
-    run = p_orgao.add_run(str(row.Orgao))
-    run.font.name = 'Gilroy ExtraBold'
-    run.font.size = Pt(12)
-    run.bold = True
-    run.font.color.rgb = RGBColor(255, 255, 255)
-    set_paragraph_background(p_orgao, 'D3D3D3')
+    # Lógica de agrupamento por Órgão (continua funcionando)
+    if row.Orgao != orgao_anterior:
+        if orgao_anterior is not None:
+            # Adiciona uma quebra de página antes de um novo grupo de órgão
+            # para melhorar a separação visual
+            doc.add_page_break()
+
+        p_orgao = doc.add_paragraph()
+        p_orgao.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_orgao.paragraph_format.space_before = Pt(0)
+        p_orgao.paragraph_format.space_after = Pt(0)
+        run = p_orgao.add_run(str(row.Orgao))
+        run.font.name = 'Gilroy ExtraBold'
+        run.font.size = Pt(12)
+        run.bold = True
+        run.font.color.rgb = RGBColor(255, 255, 255)
+        set_paragraph_background(p_orgao, 'D3D3D3')
+        
+        orgao_anterior = row.Orgao
 
     p_programa = doc.add_paragraph()
     p_programa.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -115,6 +142,7 @@ for idx, row in enumerate(df2.itertuples()):
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.autofit = False
 
+    # ... (o restante do código que cria a tabela permanece exatamente o mesmo)
     cell_iniciativa = table.cell(0, 0).merge(table.cell(0, 4))
     p_iniciativa = cell_iniciativa.paragraphs[0]
     p_iniciativa.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -141,26 +169,21 @@ for idx, row in enumerate(df2.itertuples()):
     font_valor_status.name = 'Neutro'
     font_valor_status.size = Pt(10)
     
-    # --- SEÇÃO MODIFICADA PARA APROXIMAR A DATA ---
-    # Agora mesclamos as colunas 2, 3 e 4 para colocar tudo junto.
     cell_data_merged = table.cell(1, 2).merge(table.cell(1, 4))
     p_data = cell_data_merged.paragraphs[0]
 
-    # Adiciona o rótulo da data
     run_data_label = p_data.add_run()
     run_data_label.add_picture(icone_calendario_path, width=Inches(0.17))
-    run_data_label.add_text(f'  {status_texto_label} ') # Adicionado um espaço no final
+    run_data_label.add_text(f'  {status_texto_label} ')
     font_data_label = run_data_label.font
     font_data_label.name = 'Neutro Thin'
     font_data_label.size = Pt(9)
 
-    # Adiciona o valor da data no mesmo parágrafo
     data_texto = prazo.strftime('%d/%m/%Y') if pd.notnull(prazo) else ''
     run_data_valor = p_data.add_run(f'\t\t {data_texto}')
     font_data_valor = run_data_valor.font
     font_data_valor.name = 'Neutro'
     font_data_valor.size = Pt(10)
-    # --- FIM DA SEÇÃO MODIFICADA ---
 
     cell_loc_label = table.cell(2, 0).merge(table.cell(2, 1))
     p_loc_label = cell_loc_label.paragraphs[0]
@@ -189,4 +212,3 @@ for idx, row in enumerate(df2.itertuples()):
 
 # Salvar o documento final
 doc.save('teste.docx')
-
